@@ -1,0 +1,286 @@
+<canvas id="gameCanvas"></canvas>
+
+<!-- Skin Selection Menu -->
+<div id="skinMenu">
+    <h2>Select Your Skin</h2>
+    <div id="skins">
+        <div class="skin-option">
+            <img src="skin1_thumbnail.png" alt="Classic Skin">
+            <button onclick="selectSkin('skin1')" id="skin1Button">Classic Skin</button>
+        </div>
+        <div class="skin-option">
+            <img src="skin2_thumbnail.png" alt="Cool Skin">
+            <button onclick="selectSkin('skin2')" id="skin2Button">Cool Skin</button>
+        </div>
+        <div class="skin-option">
+            <img src="skin3_thumbnail.png" alt="Locked Skin">
+            <button onclick="selectSkin('skin3')" id="skin3Button" disabled>Locked Skin (Unlock at Level 3)</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 600;
+    canvas.height = 400;
+
+    // Initialize game variables
+    let player = { x: 50, y: 300, width: 40, height: 40, dy: 0, gravity: 0.5, health: 100 };
+    let enemies = [];
+    let rewards = [];
+    let score = 0;
+    let currentLevel = 1;
+    let nextLevelScore = 1000;
+    let levelSpeedMultiplier = 1;
+    let gameOver = false;
+    
+    // Skin variables
+    let selectedSkin = 'skin1';  // Default skin
+    let unlockedSkins = ['skin1', 'skin2'];  // List of unlocked skins
+
+    // Load saved progress from localStorage
+    function loadProgress() {
+        if (localStorage.getItem('playerData')) {
+            let savedData = JSON.parse(localStorage.getItem('playerData'));
+            player.health = savedData.health;
+            score = savedData.score;
+            currentLevel = savedData.currentLevel;
+            nextLevelScore = savedData.nextLevelScore;
+            levelSpeedMultiplier = savedData.levelSpeedMultiplier;
+        }
+        if (localStorage.getItem('selectedSkin')) {
+            selectedSkin = localStorage.getItem('selectedSkin');
+        }
+        if (localStorage.getItem('unlockedSkins')) {
+            unlockedSkins = JSON.parse(localStorage.getItem('unlockedSkins'));
+        }
+        updateSkinMenu();
+    }
+
+    // Save progress to localStorage
+    function saveProgress() {
+        const playerData = {
+            health: player.health,
+            score: score,
+            currentLevel: currentLevel,
+            nextLevelScore: nextLevelScore,
+            levelSpeedMultiplier: levelSpeedMultiplier
+        };
+        localStorage.setItem('playerData', JSON.stringify(playerData));
+        localStorage.setItem('selectedSkin', selectedSkin);
+        localStorage.setItem('unlockedSkins', JSON.stringify(unlockedSkins));
+    }
+
+    // Reset game progress on game over
+    function resetProgress() {
+        localStorage.removeItem('playerData');
+        localStorage.removeItem('selectedSkin');
+        player.health = 100;
+        score = 0;
+        currentLevel = 1;
+        nextLevelScore = 1000;
+        levelSpeedMultiplier = 1;
+        enemies = [];
+        rewards = [];
+        gameOver = false;
+        gameLoop();
+    }
+
+    // Spawn enemy
+    function spawnEnemy() {
+        let enemy = { x: canvas.width, y: 300, width: 40, height: 40, speed: 3 * levelSpeedMultiplier };
+        enemies.push(enemy);
+    }
+
+    // Spawn reward (health pack)
+    function spawnReward() {
+        let reward = { x: canvas.width, y: 300, width: 20, height: 20 };
+        rewards.push(reward);
+    }
+
+    // Update game state
+    function update() {
+        if (gameOver) return;
+
+        // Check for level up
+        if (score >= nextLevelScore) {
+            levelUp();
+        }
+
+        // Player jump and gravity
+        if (player.y < 300) {
+            player.dy += player.gravity;
+            player.y += player.dy;
+        } else {
+            player.dy = 0;
+        }
+
+        // Update enemies
+        enemies.forEach((enemy, index) => {
+            enemy.x -= enemy.speed;
+
+            // Collision with player
+            if (player.x < enemy.x + enemy.width &&
+                player.x + player.width > enemy.x &&
+                player.y < enemy.y + enemy.height &&
+                player.y + player.height > enemy.y) {
+                player.health -= 20;
+                enemies.splice(index, 1);
+
+                if (player.health <= 0) {
+                    gameOver = true;
+                    alert("Game Over! Press OK to restart.");
+                    resetProgress();
+                }
+            }
+
+            // Remove off-screen enemies
+            if (enemy.x + enemy.width < 0) {
+                enemies.splice(index, 1);
+            }
+        });
+
+        // Update rewards
+        rewards.forEach((reward, index) => {
+            reward.x -= 3;
+
+            // Collision with reward (health pack)
+            if (player.x < reward.x + reward.width &&
+                player.x + player.width > reward.x &&
+                player.y < reward.y + reward.height &&
+                player.y + player.height > reward.y) {
+                player.health = Math.min(player.health + 30, 100);
+                rewards.splice(index, 1);
+            }
+
+            // Remove off-screen rewards
+            if (reward.x + reward.width < 0) {
+                rewards.splice(index, 1);
+            }
+        });
+    }
+
+    // Draw elements
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Load the selected player skin
+        let playerSkin = document.getElementById(selectedSkin);
+
+        // Draw the player using the selected skin
+        ctx.drawImage(playerSkin, player.x, player.y, player.width, player.height);
+
+        // Draw enemies
+        ctx.fillStyle = 'red';
+        enemies.forEach(enemy => {
+            ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+        });
+
+        // Draw rewards (health packs)
+        ctx.fillStyle = 'green';
+        rewards.forEach(reward => {
+            ctx.fillRect(reward.x, reward.y, reward.width, reward.height);
+        });
+
+        // Draw health bar
+        ctx.fillStyle = 'black';
+        ctx.fillRect(10, 10, 100, 20);
+        ctx.fillStyle = 'green';
+        ctx.fillRect(10, 10, player.health, 20);
+
+        // Draw score
+        ctx.fillStyle = 'black';
+        ctx.font = '20px Arial';
+        ctx.fillText('Score: ' + score, canvas.width - 120, 30);
+        ctx.fillText('Level: ' + currentLevel, canvas.width - 120, 50);
+    }
+
+    // Main game loop
+    function gameLoop() {
+        if (!gameOver) {
+            score++;
+            update();
+            draw();
+            saveProgress();  // Save progress each frame
+        }
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Level up logic
+    function levelUp() {
+        currentLevel++;
+        levelSpeedMultiplier += 0.5;
+        nextLevelScore += 1000 * currentLevel;
+
+        if (currentLevel >= 3) {
+            unlockSkin('skin3');
+        }
+
+        alert("Level " + currentLevel + " reached!");
+    }
+
+    // Skin selection functions
+    function selectSkin(skinId) {
+        if (unlockedSkins.includes(skinId)) {
+            selectedSkin = skinId;
+            localStorage.setItem('selectedSkin', skinId);
+            alert(`Selected: ${skinId}`);
+        } else {
+            alert('This skin is locked!');
+        }
+    }
+
+    // Unlock skin and enable the button
+    function unlockSkin(skinId) {
+        if (!unlockedSkins.includes(skinId)) {
+            unlockedSkins.push(skinId);
+            localStorage.setItem('unlockedSkins', JSON.stringify(unlockedSkins));
+            document.getElementById(`${skinId}Button`).disabled = false;
+            alert('You unlocked a new skin!');
+        }
+    }
+
+    // Update skin menu to enable unlocked skins
+    function updateSkinMenu() {
+        unlockedSkins.forEach(skinId => {
+            document.getElementById(`${skinId}Button`).disabled = false;
+        });
+    }
+
+    // Start the game
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && player.y === 300) {
+            player.dy = -10;  // Jump
+        }
+    });
+
+    // Spawn enemies and rewards periodically
+    setInterval(spawnEnemy, 2000);  // Every 2 seconds
+    setInterval(spawnReward, 10000);  // Every 10 seconds
+
+    loadProgress();  // Load saved progress and skins on page load
+    gameLoop();  // Start game loop
+</script>
+
+<!-- Optional CSS for Skin Menu -->
+<style>
+    #skinMenu {
+        text-align: center;
+    }
+    .skin-option {
+        display: inline-block;
+        margin: 10px;
+    }
+    .skin-option img {
+        width: 80px;
+        height: 80px;
+        display: block;
+        margin: 0 auto;
+    }
+    button {
+        padding: 10px;
+        font-size: 14px;
+        cursor: pointer;
+    }
+</style>
